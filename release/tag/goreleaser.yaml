@@ -50,6 +50,13 @@ changelog:
 release:
   github:
     owner: efiacor
-    name: porchctl
+    name: porch-dev
   draft: false
   prerelease: true
+  # Header for the release body.
+  #
+  # Templates: allowed
+  header: |
+    ## PORCHCTL ({{ .Date }})
+
+    Welcome to this new release!
