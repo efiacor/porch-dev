@@ -23,6 +23,28 @@ env:
   - CGO_ENABLED=0
   - GO111MODULE=on
 builds:
+  - id: darwin-amd64
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - darwin
+    goarch:
+      - amd64
+    ldflags: -s -w
+    main: ./cmd/porchctl
+
+  - id: darwin-arm64
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    ldflags: -s -w
+    main: ./cmd/porchctl
+
   - id: linux-amd64
     env:
       - CGO_ENABLED=0
@@ -33,6 +55,18 @@ builds:
       - amd64
     ldflags: -s -w -extldflags "-z noexecstack"
     main: ./cmd/porchctl
+
+  - id: linux-arm64
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - linux
+    goarch:
+      - arm64
+    ldflags: -s -w -extldflags "-z noexecstack"
+    main: ./cmd/porchctl
+
 
 checksum:
   name_template: "checksums.txt"
@@ -52,11 +86,11 @@ release:
     owner: efiacor
     name: porch-dev
   draft: false
-  prerelease: true
+  prerelease: "true"
   # Header for the release body.
   #
   # Templates: allowed
   header: |
-    ## PORCHCTL ({{ .Date }})
+    ## Porchctl ({{ .Date }})
 
     Welcome to this new release!
