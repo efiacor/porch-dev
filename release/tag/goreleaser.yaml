@@ -37,7 +37,7 @@ builds:
 checksum:
   name_template: "checksums.txt"
 snapshot:
-  name_template: "master"
+  name_template: "main"
 changelog:
   sort: asc
   filters:
