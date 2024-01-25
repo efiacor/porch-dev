@@ -49,7 +49,7 @@ changelog:
       - Merge branch
 release:
   github:
-    owner: nephio
+    owner: efiacor
     name: porchctl
   draft: false
   prerelease: true
