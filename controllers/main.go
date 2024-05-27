@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt and Nephio Authors
+// Copyright 2022-2024 The kpt and Nephio Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
 
 package main
 
-//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0 rbac:roleName=porch-controllers webhook paths="."
+//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0 rbac:headerFile=../scripts/boilerplate.yaml.txt,roleName=porch-controllers webhook paths="."
 
-//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0 crd paths="./..." output:crd:artifacts:config=config/crd/bases
+//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0 crd:headerFile=../scripts/boilerplate.yaml.txt paths="./..." output:crd:artifacts:config=config/crd/bases
 
 import (
 	"context"
@@ -32,6 +32,8 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -39,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/nephio-project/porch/controllers/fleetsyncs/pkg/controllers/fleetsync"
 	"github.com/nephio-project/porch/controllers/packagevariants/pkg/controllers/packagevariant"
 	"github.com/nephio-project/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
 	"github.com/nephio-project/porch/pkg/controllerrestmapper"
@@ -50,7 +51,6 @@ var (
 	reconcilers = map[string]Reconciler{
 		"packagevariants":    &packagevariant.PackageVariantReconciler{},
 		"packagevariantsets": &packagevariantset.PackageVariantSetReconciler{},
-		"fleetsyncs":         fleetsync.NewFleetSyncReconciler(),
 	}
 )
 
@@ -117,8 +117,12 @@ func run(ctx context.Context) error {
 
 	managerOptions := ctrl.Options{
 		Scheme:                     scheme,
-		MetricsBindAddress:         ":8080",
-		Port:                       9443,
+		Metrics: 					metricsserver.Options{
+			BindAddress: ":8080",
+		},
+		WebhookServer: 				webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 		HealthProbeBindAddress:     ":8081",
 		LeaderElection:             false,
 		LeaderElectionID:           "porch-operators.config.porch.kpt.dev",

@@ -1,4 +1,4 @@
-# Copyright 2022 The kpt and Nephio Authors
+# Copyright 2022-2024 The kpt and Nephio Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ KUBECONFIG=$(CURDIR)/deployments/local/kubeconfig
 BUILDDIR=$(CURDIR)/.build
 CACHEDIR=$(CURDIR)/.cache
 DEPLOYCONFIGDIR=$(BUILDDIR)/deploy
+DEPLOYKPTCONFIGDIR=$(DEPLOYCONFIGDIR)/kpt_pkgs
 DEPLOYCONFIG_NO_SA_DIR=$(BUILDDIR)/deploy-no-sa
 KPTDIR=$(abspath $(CURDIR)/..)
 
@@ -28,13 +29,6 @@ include default-go.mk
 
 # This includes the 'help' target that prints out all targets with their descriptions organized by categories
 include default-help.mk
-
-# Modules are ordered in dependency order. A module precedes modules that depend on it.
-MODULES = \
- examples/apps/hello-server \
- api \
- . \
- controllers \
 
 # GCP project to use for development
 
@@ -65,11 +59,12 @@ PORCH_FUNCTION_RUNNER_IMAGE ?= porch-function-runner
 PORCH_CONTROLLERS_IMAGE ?= porch-controllers
 PORCH_WRAPPER_SERVER_IMAGE ?= porch-wrapper-server
 TEST_GIT_SERVER_IMAGE ?= test-git-server
+SKIP_IMG_BUILD ?= false
 
 # Only enable a subset of reconcilers in porch controllers by default. Use the RECONCILERS
 # env variable to specify a specific list of reconcilers or use
 # RECONCILERS=* to enable all known reconcilers.
-ALL_RECONCILERS="packagevariants,packagevariantsets,fleetsyncs"
+ALL_RECONCILERS="packagevariants,packagevariantsets"
 ifndef RECONCILERS
   ENABLED_RECONCILERS="packagevariants,packagevariantsets"
 else
@@ -79,6 +74,13 @@ else
     ENABLED_RECONCILERS=$(RECONCILERS)
   endif
 endif
+
+# Modules are ordered in dependency order. A module precedes modules that depend on it.
+MODULES = \
+ examples/apps/hello-server \
+ api \
+ . \
+ controllers \
 
 .DEFAULT_GOAL := all
 
@@ -145,32 +147,29 @@ start-function-runner:
 	  $(IMAGE_REPO)/$(PORCH_FUNCTION_RUNNER_IMAGE):$(IMAGE_TAG) \
 	  -disable-runtimes pod
 
+.PHONY: generate-api
+generate-api:
+	KUBE_VERBOSE=2 $(CURDIR)/scripts/generate-api.sh
+
 .PHONY: generate
-generate:
+generate: generate-api
 	@for f in $(MODULES); do (cd $$f; echo "Generating $$f"; go generate -v ./...) || exit 1; done
 
 .PHONY: tidy
 tidy:
 	@for f in $(MODULES); do (cd $$f; echo "Tidying $$f"; go mod tidy) || exit 1; done
 
-.PHONY: test-porch
-test-porch:
-	#@for f in $(MODULES); do (cd $$f; echo "Testing $$f"; E2E=1 go test -v -race --count=1 ./...) || exit 1; done
-	@for f in $(MODULES); do (cd $$f; echo "Testing $$f"; go test -v -race --count=1 ./...) || exit 1; done
-
 .PHONY: configure-git
 configure-git:
 	git config --global --add user.name test
 	git config --global --add user.email test@nephio.org
-
-.PHONY: ci-test-porch
-ci-test-porch: configure-git test-porch
 
 .PHONY: ci-unit
 ci-unit: configure-git test
 
 
 PORCH = $(BUILDDIR)/porch
+PORCHCTL = $(BUILDDIR)/porchctl
 
 .PHONY: run-local
 run-local: porch
@@ -192,6 +191,10 @@ run-jaeger:
 .PHONY: porch
 porch:
 	go build -o $(PORCH) ./cmd/porch
+
+.PHONY: porchctl
+porchctl:
+	go build -o $(PORCHCTL) ./cmd/porchctl
 
 .PHONY: fix-headers
 fix-headers:
@@ -283,18 +286,52 @@ push-and-deploy-no-sa: push-images deploy-no-sa
 KIND_CONTEXT_NAME ?= kind
 
 .PHONY: run-in-kind
+run-in-kind: IMAGE_REPO=porch-kind
 run-in-kind:
-	IMAGE_REPO=porch-kind make build-images
-	kind load docker-image porch-kind/porch-server:${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
-	kind load docker-image porch-kind/porch-controllers:${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
-	kind load docker-image porch-kind/porch-function-runner:${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
-	kind load docker-image porch-kind/porch-wrapper-server:${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
-	kind load docker-image porch-kind/test-git-server:${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
-	IMAGE_REPO=porch-kind make deployment-config
-	KUBECONFIG=$(KUBECONFIG) kubectl apply --wait --recursive --filename ./.build/deploy
+	make build-images
+	kind load docker-image $(IMAGE_REPO)/$(PORCH_SERVER_IMAGE):${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
+	kind load docker-image $(IMAGE_REPO)/$(PORCH_CONTROLLERS_IMAGE):${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
+	kind load docker-image $(IMAGE_REPO)/$(PORCH_FUNCTION_RUNNER_IMAGE):${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
+	kind load docker-image $(IMAGE_REPO)/$(PORCH_WRAPPER_SERVER_IMAGE):${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
+	kind load docker-image $(IMAGE_REPO)/$(TEST_GIT_SERVER_IMAGE):${IMAGE_TAG} -n ${KIND_CONTEXT_NAME}
+	make deployment-config
+	KUBECONFIG=$(KUBECONFIG) kubectl apply --wait --recursive --filename $(DEPLOYCONFIGDIR)
 	KUBECONFIG=$(KUBECONFIG) kubectl rollout status deployment function-runner --namespace porch-system
 	KUBECONFIG=$(KUBECONFIG) kubectl rollout status deployment porch-controllers --namespace porch-system
 	KUBECONFIG=$(KUBECONFIG) kubectl rollout status deployment porch-server --namespace porch-system
+
+.PHONY: deployment-config-kpt
+deployment-config-kpt:
+	rm -rf $(DEPLOYKPTCONFIGDIR) || true
+	mkdir -p $(DEPLOYKPTCONFIGDIR)
+	./scripts/create-deployment-kpt.sh \
+	  --destination $(DEPLOYKPTCONFIGDIR) \
+      --server-image "$(IMAGE_REPO)/$(PORCH_SERVER_IMAGE):$(IMAGE_TAG)" \
+	  --controllers-image "$(IMAGE_REPO)/$(PORCH_CONTROLLERS_IMAGE):$(IMAGE_TAG)" \
+	  --function-image "$(IMAGE_REPO)/$(PORCH_FUNCTION_RUNNER_IMAGE):$(IMAGE_TAG)" \
+	  --wrapper-server-image "$(IMAGE_REPO)/$(PORCH_WRAPPER_SERVER_IMAGE):$(IMAGE_TAG)" \
+	  --test-git-server-image "$(IMAGE_REPO)/$(TEST_GIT_SERVER_IMAGE):${IMAGE_TAG}" \
+	  --enabled-reconcilers "$(ENABLED_RECONCILERS)" \
+	  --kind-context "$(KIND_CONTEXT_NAME)"
+
+.PHONY: run-in-kind-kpt
+run-in-kind-kpt: IMAGE_REPO=porch-kind
+run-in-kind-kpt:
+  ifeq ($(SKIP_IMG_BUILD), false)
+	make build-images; 
+  endif
+	make deployment-config-kpt
+
+PKG=gitea-dev
+.PHONY: deploy-gitea-dev-pkg
+deploy-gitea-dev-pkg:
+	PKG=gitea-dev
+	rm -rf $(DEPLOYKPTCONFIGDIR)/${PKG} || true
+	mkdir -p $(DEPLOYKPTCONFIGDIR)/${PKG}
+	./scripts/install-local-kpt-pkg.sh \
+	  --destination $(DEPLOYKPTCONFIGDIR) \
+	  --pkg ${PKG} \
+	  --kubeconfig $(KUBECONFIG)
 
 .PHONY: vulncheck
 vulncheck: build
