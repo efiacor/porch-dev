@@ -29,7 +29,7 @@ jobs:
         uses: vladopajic/go-test-coverage@v2
         with:
           # Configure action using config file (option 1)
-          config: ./.github/.testcoverage.yml
+          config: ${GITHUB_WORKSPACE}/.github/.testcoverage.yml
           git-token: ${{ secrets.GITHUB_TOKEN }}
           
           # # Configure action by specifying input parameters individually (option 2).
