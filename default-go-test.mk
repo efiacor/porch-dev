@@ -14,6 +14,7 @@
 
 GO_VERSION ?= 1.22.2
 TEST_COVERAGE_FILE=lcov.info
+TEST_COVERAGE_TMP_FILE=lcov.tmp.info
 TEST_COVERAGE_HTML_FILE=coverage_unit.html
 TEST_COVERAGE_FUNC_FILE=func_coverage.out
 GIT_ROOT_DIR ?= $(dir $(lastword $(MAKEFILE_LIST)))
@@ -26,11 +27,12 @@ unit: test
 test: ## Run unit tests (go test)
 ifeq ($(CONTAINER_RUNNABLE), 0)
 		$(RUN_CONTAINER_COMMAND) docker.io/nephio/gotests:1782782171367346176 \
-         sh -e -c "git config --global --add user.name test; \
-	 git config --global --add user.email test@nephio.org; \
-	 go test ./... -v -coverprofile ${TEST_COVERAGE_FILE}; \
-         go tool cover -html=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_HTML_FILE}; \
-         go tool cover -func=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_FUNC_FILE}"
+        sh -e -c "git config --global --add user.name test; \
+	 	git config --global --add user.email test@nephio.org; \
+	 	go test ./... -v -coverprofile ${TEST_COVERAGE_TMP_FILE}; \
+		cat ${TEST_COVERAGE_TMP_FILE} | grep -v "test" > ${TEST_COVERAGE_FILE}; \
+        go tool cover -html=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_HTML_FILE}; \
+        go tool cover -func=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_FUNC_FILE}"
 else
 		go test ./... -v -coverprofile ${TEST_COVERAGE_FILE}
 		go tool cover -html=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_HTML_FILE}

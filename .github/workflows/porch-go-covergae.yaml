@@ -1,0 +1,66 @@
+name: "Go test coverage"
+on:
+  pull_request:
+  push:
+    branches:
+      # It's important that the action also runs on merge to main
+      - main
+
+jobs:
+  # coverage:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #     with:
+  #       # default fetch-depth is insufficent to find previous coverage notes
+  #       fetch-depth: 10
+
+  #   - uses: gwatts/go-coverage-action@v2
+  #     id: coverage
+  #     with:
+  #       # Optional coverage threshold
+  #       # use fail-coverage to determine what should happen below this threshold
+  #       coverage-threshold: 80
+
+  #       # collect coverage for all packages beyond the one under test
+  #       cover-pkg: ./...
+
+  #       # Ignore code-generated files when calculating coverage totals
+  #       ignore-pattern: |
+  #         \.pb\.go$
+  #         \_string\.go$
+        
+  #       # A url that the html report will be accessible at, once your
+  #       # workflow uploads it.  Used in the pull request comment.
+  #       report-url: https://artifacts.example.com/go-coverage/${{ github.ref_name}}.html
+
+  #   - name: Upload coverage to s3
+  #     # ensure this runs regardless of whether the threshold is met using always()
+  #     if: always() && steps.coverage.outputs.report-pathname != ''
+  #     run: |
+  #       aws s3 cp ${{ steps.coverage.outputs.report-pathname }} s3://artifacts.example.com-bucket/go-coverage/${{ github.ref_name}}.html
+  coverage-report:
+    name: Go test coverage check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      
+      - name: generate test coverage
+        run: make test
+
+      - name: check test coverage
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          # Configure action using config file (option 1)
+          config: ./.testcoverage.yml
+          
+          # # Configure action by specifying input parameters individually (option 2).
+          # # If you are using config file (option 1) you shouldn't use these parameters, however
+          # # specifing these action parameters will override appropriate config values.
+          # profile: cover.out
+          # local-prefix: github.com/org/project
+          # threshold-file: 80
+          # threshold-package: 80
+          # threshold-total: 95
+    
