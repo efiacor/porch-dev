@@ -1,10 +1,21 @@
 name: "Go test coverage"
 on:
-  pull_request:
   push:
-    branches:
-      # It's important that the action also runs on merge to main
-      - main
+    paths-ignore:
+      - "build/**"
+      - "deployments/**"
+      - "docs/**"
+      - "examples/**"
+      - "release/**"
+      - "scripts/**"
+  pull_request:
+    paths-ignore:
+      - "build/**"
+      - "deployments/**"
+      - "docs/**"
+      - "examples/**"
+      - "release/**"
+      - "scripts/**"
 
 permissions:
   contents: write
@@ -32,13 +43,3 @@ jobs:
           config: ./.github/.testcoverage.yaml
           git-branch: badges
           git-token: ${{ github.ref_name == 'main' && secrets.GITHUB_TOKEN || '' }}
-          
-          # # Configure action by specifying input parameters individually (option 2).
-          # # If you are using config file (option 1) you shouldn't use these parameters, however
-          # # specifing these action parameters will override appropriate config values.
-          # profile: cover.out
-          # local-prefix: github.com/org/project
-          # threshold-file: 80
-          # threshold-package: 80
-          # threshold-total: 95
-    
